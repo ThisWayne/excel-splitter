@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Excel Splitter and Zipper</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+<body>
+    <h1>Excel Splitter and Zipper</h1>
+    <label for="chunkSize">Rows per file:</label>
+    <input type="number" id="chunkSize" value="50">
+    <br><br>
+    <input type="file" id="upload" accept=".xlsx, .xls">
+    <br><br>
+    <button onclick="splitAndZipFromInput()">Split and Zip</button>
+    <script>
+        let jsonData;
+
+        document.getElementById('upload').addEventListener('change', handleFile, false);
+
+        function handleFile(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                jsonData = XLSX.utils.sheet_to_json(worksheet);
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function splitAndZipFromInput() {
+            const chunkSize = parseInt(document.getElementById('chunkSize').value, 10);
+            if (!jsonData || isNaN(chunkSize) || chunkSize <= 0) {
+                alert('Please select a valid Excel file and enter a valid number of rows per file.');
+                return;
+            }
+            splitAndZip(jsonData, chunkSize);
+        }
+
+        function splitAndZip(data, chunkSize) {
+            const zip = new JSZip();
+            let fileCount = 1;
+
+            for (let i = 0; i < data.length; i += chunkSize) {
+                const chunk = data.slice(i, i + chunkSize);
+                const newWorkbook = XLSX.utils.book_new();
+                const newWorksheet = XLSX.utils.json_to_sheet(chunk);
+
+                XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Sheet1');
+
+                const filename = `output_${fileCount}.xlsx`;
+                const wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'binary' });
+                zip.file(filename, s2ab(wbout));
+                fileCount++;
+            }
+
+            zip.generateAsync({ type: 'blob' }).then(function(content) {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = 'output.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        }
+
+        function s2ab(s) {
+            const buf = new ArrayBuffer(s.length);
+            const view = new Uint8Array(buf);
+            for (let i = 0; i < s.length; i++) {
+                view[i] = s.charCodeAt(i) & 0xFF;
+            }
+            return buf;
+        }
+    </script>
+</body>
+</html>
